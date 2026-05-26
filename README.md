@@ -2,8 +2,7 @@
 
 A personal, single-page "morning briefing" that pulls my calendar, inbox, tasks,
 notes, files, and now-playing into one calm, editorial dashboard — deployed to the
-edge so it loads on **any device and any network**, including a locked-down work
-laptop where the usual tools are blocked.
+edge so it loads on **any device and any network**.
 
 > Built as a weekend project to scratch a real itch, and to keep my hands on the
 > full product loop: framing the problem, making build-vs-buy and architecture
@@ -13,8 +12,7 @@ laptop where the usual tools are blocked.
 
 ## The problem
 
-My day's context lives in six different apps. On my work-issued laptop, the
-aggregator I'd normally use is network-blocked, so first thing every morning I was
+My day's context lives in six different apps. First thing every morning I was
 tab-hopping across Google Calendar, Gmail, Drive, Notion, Todoist, and Spotify just
 to get oriented.
 
