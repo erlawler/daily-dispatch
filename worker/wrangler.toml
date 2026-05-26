@@ -1,0 +1,15 @@
+name = "daily-dispatch"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# account_id is inferred from your authenticated Cloudflare account (`wrangler login`).
+# Set it explicitly here if you belong to multiple accounts.
+
+[[kv_namespaces]]
+binding = "TOKENS"
+id = "45c265e8f3e84ea9918b35d62b5933ba"
+preview_id = "9519617a5ba54ce287d616d6a683747f"
+
+[vars]
+TIMEZONE = "America/Chicago"
