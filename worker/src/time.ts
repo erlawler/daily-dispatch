@@ -43,6 +43,21 @@ export function dayBounds(tz: string, now = new Date()): DayBounds {
   };
 }
 
+// Current hour (0-23) in `tz`. Used to fire the 7am digest correctly across DST.
+export function currentHour(tz: string, now = new Date()): number {
+  const h = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    hour: '2-digit',
+    hourCycle: 'h23',
+  }).format(now);
+  return parseInt(h, 10);
+}
+
+// Long weekday name in `tz`, e.g. "Monday".
+export function weekdayName(tz: string, now = new Date()): string {
+  return new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'long' }).format(now);
+}
+
 export function formatTime(iso: string, tz: string): string {
   return new Intl.DateTimeFormat('en-US', {
     timeZone: tz,

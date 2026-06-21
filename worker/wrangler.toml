@@ -13,3 +13,8 @@ preview_id = "9519617a5ba54ce287d616d6a683747f"
 
 [vars]
 TIMEZONE = "America/Chicago"
+
+# 7am Central on weekdays. Two UTC times cover CST (UTC-6) and CDT (UTC-5);
+# the Worker only sends when it's actually 7am in TIMEZONE, so exactly one fires.
+[triggers]
+crons = ["0 12 * * 1-5", "0 13 * * 1-5"]

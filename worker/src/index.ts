@@ -1,9 +1,7 @@
-// Worker entry, /api/dashboard route.
-import { fetchGoogle } from './services/google';
-import { fetchNotion } from './services/notion';
-import { fetchTodoist } from './services/todoist';
-import { fetchSpotify } from './services/spotify';
-import { synthesizeGlance } from './synthesize';
+// Worker entry: /api/dashboard route + 7am digest cron.
+import { buildDashboard } from './dashboard';
+import { sendDigest } from './digest';
+import { currentHour } from './time';
 
 export interface Env {
   TOKENS: KVNamespace;
@@ -19,6 +17,12 @@ export interface Env {
   ANTHROPIC_API_KEY: string;
   DISPATCH_KEY: string;
   TIMEZONE: string;
+  // Digest delivery (optional — each channel fires only if configured):
+  RESEND_API_KEY: string;
+  DIGEST_TO: string;
+  DIGEST_FROM: string;
+  PUSHOVER_TOKEN: string;
+  PUSHOVER_USER: string;
 }
 
 export default {
@@ -41,28 +45,8 @@ export default {
         return new Response('Forbidden', { status: 403, headers: corsHeaders });
       }
       try {
-        const [google, notion, todoist, spotify] = await Promise.all([
-          fetchGoogle(env),
-          fetchNotion(env),
-          fetchTodoist(env),
-          fetchSpotify(env),
-        ]);
-
-        const data = {
-          calendar: google.calendar,
-          horizon: google.horizon,
-          emails: google.emails,
-          tasks: todoist,
-          notion,
-          files: google.files,
-          spotify,
-        };
-
-        const glance = await synthesizeGlance(data, env);
-        return Response.json(
-          { glance, ...data, generated_at: new Date().toISOString() },
-          { headers: corsHeaders }
-        );
+        const payload = await buildDashboard(env);
+        return Response.json(payload, { headers: corsHeaders });
       } catch (err) {
         return Response.json(
           { error: String(err) },
@@ -72,5 +56,16 @@ export default {
     }
 
     return new Response('Not found', { status: 404, headers: corsHeaders });
+  },
+
+  // Cron fires at 12:00 and 13:00 UTC on weekdays; we proceed only when it's
+  // actually 7am in TIMEZONE, so the digest lands at 7am Central year-round (DST-safe).
+  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    if (currentHour(env.TIMEZONE) !== 7) return;
+    const work = (async () => {
+      const data = await buildDashboard(env);
+      await sendDigest(env, data);
+    })();
+    ctx.waitUntil(work);
   },
 } satisfies ExportedHandler<Env>;
