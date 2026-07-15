@@ -6,6 +6,13 @@ import { weekdayName } from './time';
 
 const DASHBOARD_URL = 'https://dispatch.eric-lawler.com';
 
+// Names of sources that failed this run (for a "data may be incomplete" note).
+function downSources(d: DashboardData): string[] {
+  return Object.entries(d.sources ?? {})
+    .filter(([, v]) => v !== 'ok')
+    .map(([k]) => k);
+}
+
 function esc(s: unknown): string {
   return String(s ?? '').replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string
@@ -49,6 +56,11 @@ function emailHTML(d: DashboardData, weekday: string): string {
         ? `<p style="font:italic 17px/1.5 Georgia,serif;color:#4A4339;margin:0 0 8px">${esc(d.glance)}</p>`
         : ''
     }
+    ${
+      downSources(d).length
+        ? `<p style="font:12px/1.5 -apple-system,sans-serif;color:#A0522D;margin:0 0 8px">⚠ Unreachable this morning: ${esc(downSources(d).join(', '))} — sections may be incomplete.</p>`
+        : ''
+    }
     ${section('The Schedule', cal)}
     ${section('The Horizon', hor)}
     ${section('Correspondence', mail)}
@@ -90,7 +102,9 @@ function pushText(d: DashboardData): string {
   ].join(' · ');
   const first = d.calendar[0] ? `\nFirst: ${d.calendar[0].time} ${d.calendar[0].title}` : '';
   const glance = d.glance ? `${d.glance}\n` : '';
-  return `${glance}${counts}${first}`.slice(0, 1000);
+  const down = downSources(d);
+  const warn = down.length ? `\n⚠ unreachable: ${down.join(', ')}` : '';
+  return `${glance}${counts}${first}${warn}`.slice(0, 1000);
 }
 
 async function sendPush(env: Env, d: DashboardData, weekday: string): Promise<string> {

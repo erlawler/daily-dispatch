@@ -25,6 +25,7 @@ export interface FileItem {
   url: string;
 }
 export interface GoogleData {
+  ok: boolean;
   calendar: CalendarItem[];
   horizon: HorizonItem[];
   emails: EmailItem[];
@@ -97,7 +98,8 @@ function cleanFrom(raw: string): string {
 }
 
 async function fetchEmails(token: string): Promise<EmailItem[]> {
-  const q = 'in:inbox newer_than:1d -category:promotions -category:social -category:updates';
+  // category:primary keeps marketing/newsletter mail out of Correspondence.
+  const q = 'in:inbox newer_than:1d category:primary';
   const list = await gFetch(
     `https://gmail.googleapis.com/gmail/v1/users/me/threads?q=${encodeURIComponent(q)}&maxResults=8`,
     token
@@ -138,22 +140,32 @@ async function fetchFiles(token: string, tz: string): Promise<FileItem[]> {
   }));
 }
 
-const EMPTY: GoogleData = { calendar: [], horizon: [], emails: [], files: [] };
+const EMPTY: GoogleData = { ok: false, calendar: [], horizon: [], emails: [], files: [] };
 
 export async function fetchGoogle(env: Env): Promise<GoogleData> {
   let token: string;
   try {
     token = await getGoogleAccessToken(env);
   } catch {
-    return EMPTY; // Auth failure shouldn't blank the whole dashboard.
+    return EMPTY; // Auth failure: report unhealthy instead of a fake quiet day.
   }
   const tz = env.TIMEZONE;
 
+  let ok = true;
   const [cal, emails, files] = await Promise.all([
-    fetchCalendar(token, tz).catch(() => ({ calendar: [], horizon: [] })),
-    fetchEmails(token).catch(() => [] as EmailItem[]),
-    fetchFiles(token, tz).catch(() => [] as FileItem[]),
+    fetchCalendar(token, tz).catch(() => {
+      ok = false;
+      return { calendar: [] as CalendarItem[], horizon: [] as HorizonItem[] };
+    }),
+    fetchEmails(token).catch(() => {
+      ok = false;
+      return [] as EmailItem[];
+    }),
+    fetchFiles(token, tz).catch(() => {
+      ok = false;
+      return [] as FileItem[];
+    }),
   ]);
 
-  return { calendar: cal.calendar, horizon: cal.horizon, emails, files };
+  return { ok, calendar: cal.calendar, horizon: cal.horizon, emails, files };
 }

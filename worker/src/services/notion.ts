@@ -7,6 +7,10 @@ export interface NotionItem {
   sub: string;
   url: string;
 }
+export interface NotionResult {
+  ok: boolean;
+  items: NotionItem[];
+}
 
 function extractTitle(obj: any): string {
   // Database objects carry a top-level title array.
@@ -25,7 +29,7 @@ function extractTitle(obj: any): string {
   return 'Untitled';
 }
 
-export async function fetchNotion(env: Env): Promise<NotionItem[]> {
+export async function fetchNotion(env: Env): Promise<NotionResult> {
   try {
     const resp = await fetch('https://api.notion.com/v1/search', {
       method: 'POST',
@@ -39,14 +43,17 @@ export async function fetchNotion(env: Env): Promise<NotionItem[]> {
         page_size: 5,
       }),
     });
-    if (!resp.ok) return [];
+    if (!resp.ok) return { ok: false, items: [] };
     const data = (await resp.json()) as { results?: any[] };
-    return (data.results ?? []).map((r) => ({
-      title: extractTitle(r),
-      sub: r.last_edited_time ? `Edited ${shortDate(r.last_edited_time, env.TIMEZONE)}` : '',
-      url: r.url ?? '',
-    }));
+    return {
+      ok: true,
+      items: (data.results ?? []).map((r) => ({
+        title: extractTitle(r),
+        sub: r.last_edited_time ? `Edited ${shortDate(r.last_edited_time, env.TIMEZONE)}` : '',
+        url: r.url ?? '',
+      })),
+    };
   } catch {
-    return [];
+    return { ok: false, items: [] };
   }
 }

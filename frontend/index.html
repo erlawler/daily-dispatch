@@ -760,6 +760,12 @@ async function loadAll() {
 }
 
 function render(d) {
+  // Per-source health: a dead connection should say so, not impersonate a quiet day.
+  const down = s => !!(d.sources && d.sources[s] === "error");
+  const googleMsg  = down("google")  ? "Can't reach Google right now — the connection likely needs re-auth." : null;
+  const todoistMsg = down("todoist") ? "Can't reach Todoist right now — check the connection." : null;
+  const notionMsg  = down("notion")  ? "Can't reach Notion right now — check the connection." : null;
+
   // Glance
   if (d.glance) {
     document.getElementById("glance").innerHTML = `<p>${escape(d.glance)}</p>`;
@@ -776,7 +782,7 @@ function render(d) {
         ${item.sub ? `<div class="entry-sub">${escape(item.sub)}</div>` : ""}
       </div>
     </div>
-  `, "Nothing on the calendar. A clean slate.");
+  `, googleMsg || "Nothing on the calendar. A clean slate.");
 
   // Horizon (upcoming after today)
   renderList("horizon-list", d.horizon, item => `
@@ -787,7 +793,7 @@ function render(d) {
         ${item.sub ? `<div class="entry-sub">${escape(item.sub)}</div>` : ""}
       </div>
     </div>
-  `, "The week ahead is open.");
+  `, googleMsg || "The week ahead is open.");
 
   // Emails
   renderList("email-list", d.emails, item => `
@@ -796,7 +802,7 @@ function render(d) {
       <div class="entry-title">${escape(item.subject || "(no subject)")}</div>
       ${item.snippet ? `<div class="entry-sub">${escape(item.snippet)}</div>` : ""}
     </div>
-  `, "The inbox is quiet.");
+  `, googleMsg || "The inbox is quiet.");
 
   // Tasks (Todoist work items)
   renderList("task-list", d.tasks, item => `
@@ -804,7 +810,7 @@ function render(d) {
       <div class="entry-title">${escape(item.title)}</div>
       ${item.sub ? `<div class="entry-sub">${escape(item.sub)}</div>` : ""}
     </div>
-  `, "No open work items. Rare and good.");
+  `, todoistMsg || "No open work items. Rare and good.");
 
   // Notion (recent pages) — title links to the page when a URL is present
   renderList("notion-list", d.notion, item => `
@@ -812,7 +818,7 @@ function render(d) {
       <div class="entry-title">${titleHTML(item)}</div>
       ${item.sub ? `<div class="entry-sub">${escape(item.sub)}</div>` : ""}
     </div>
-  `, "Notion is quiet.");
+  `, notionMsg || "Notion is quiet.");
 
   // Files — title links to the Drive file when a URL is present
   renderList("file-list", d.files, item => `
@@ -820,10 +826,10 @@ function render(d) {
       <div class="entry-title">${titleHTML(item)}</div>
       ${item.sub ? `<div class="entry-sub">${escape(item.sub)}</div>` : ""}
     </div>
-  `, "The archive is still.");
+  `, googleMsg || "The archive is still.");
 
   // Spotify
-  renderSpotify(d.spotify);
+  renderSpotify(d.spotify, down("spotify"));
 
   // "Gathered" timestamp in the coda
   if (d.generated_at) {
@@ -832,11 +838,19 @@ function render(d) {
   }
 }
 
-function renderSpotify(s) {
+function renderSpotify(s, isDown) {
   const titleEl = document.getElementById("np-title");
   const subEl = document.getElementById("np-sub");
   const recentEl = document.getElementById("np-recent");
   const disc = document.getElementById("np-disc");
+
+  if (isDown) {
+    titleEl.textContent = "Off the air";
+    subEl.textContent = "Can't reach Spotify right now — the connection likely needs re-auth.";
+    recentEl.innerHTML = "";
+    disc.classList.remove("playing");
+    return;
+  }
 
   if (!s || (s.playing == null && (!s.recent || s.recent.length === 0))) {
     titleEl.textContent = "Silence, for now";

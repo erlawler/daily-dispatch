@@ -10,12 +10,15 @@ export interface SpotifyData {
   playing: SpotifyTrack | null;
   recent: SpotifyTrack[];
 }
+export interface SpotifyResult extends SpotifyData {
+  ok: boolean;
+}
 
 function artists(item: any): string {
   return (item?.artists ?? []).map((a: any) => a.name).join(', ');
 }
 
-export async function fetchSpotify(env: Env): Promise<SpotifyData> {
+export async function fetchSpotify(env: Env): Promise<SpotifyResult> {
   try {
     const token = await getSpotifyAccessToken(env);
     const auth = { Authorization: `Bearer ${token}` };
@@ -28,6 +31,7 @@ export async function fetchSpotify(env: Env): Promise<SpotifyData> {
       const data = (await now.json()) as any;
       if (data?.item) {
         return {
+          ok: true,
           playing: { track: data.item.name, artist: artists(data.item) },
           recent: [],
         };
@@ -39,7 +43,7 @@ export async function fetchSpotify(env: Env): Promise<SpotifyData> {
       'https://api.spotify.com/v1/me/player/recently-played?limit=4',
       { headers: auth }
     );
-    if (!recentRes.ok) return { playing: null, recent: [] };
+    if (!recentRes.ok) return { ok: false, playing: null, recent: [] };
 
     const recentData = (await recentRes.json()) as any;
     const recent: SpotifyTrack[] = (recentData.items ?? []).map((i: any) => ({
@@ -47,8 +51,8 @@ export async function fetchSpotify(env: Env): Promise<SpotifyData> {
       artist: artists(i.track),
     }));
 
-    return { playing: null, recent };
+    return { ok: true, playing: null, recent };
   } catch {
-    return { playing: null, recent: [] };
+    return { ok: false, playing: null, recent: [] };
   }
 }
