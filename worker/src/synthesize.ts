@@ -32,6 +32,7 @@ export async function synthesizeGlance(data: DashboardData, env: Env): Promise<s
         max_tokens: 80,
         system:
           'You write one calm, present-tense sentence summarizing the day at a glance. ' +
+          'Address the reader as "you". Never write in the first person: no "I", "my", or "we". ' +
           'No em dashes. No preamble. Return only the sentence.',
         messages: [{ role: 'user', content: `Today: ${facts}.` }],
       }),

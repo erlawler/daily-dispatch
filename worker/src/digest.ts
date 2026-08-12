@@ -2,9 +2,58 @@
 // Each channel is independent and only fires if its secrets are configured.
 import type { Env } from './index';
 import type { DashboardData } from './dashboard';
-import { weekdayName } from './time';
+import { currentHour, isWeekday, localDate, weekdayName } from './time';
 
-const DASHBOARD_URL = 'https://dispatch.eric-lawler.com';
+const DEFAULT_DASHBOARD_URL = 'https://dispatch.eric-lawler.com';
+
+function dashboardUrl(env: Env): string {
+  return env.DASHBOARD_URL || DEFAULT_DASHBOARD_URL;
+}
+
+// ---- When to send ----
+
+// The digest targets 7am local. Two later fires act as catch-ups so a cron the
+// platform drops (observed roughly once a fortnight) still lands the same morning
+// instead of vanishing silently.
+export const DIGEST_HOUR = 7;
+export const DIGEST_CATCHUP_UNTIL_HOUR = 9;
+
+export interface DigestDecision {
+  send: boolean;
+  /** Local calendar date this run belongs to, and the "already sent" key. */
+  date: string;
+  reason: string;
+}
+
+// Pure so the whole schedule is provable in tests: weekday, hour window, and the
+// once-per-day guarantee all decided here rather than in the cron expression.
+export function decideDigest(
+  tz: string,
+  lastSent: string | null,
+  now = new Date()
+): DigestDecision {
+  const date = localDate(tz, now);
+  const hour = currentHour(tz, now);
+
+  if (!isWeekday(tz, now)) {
+    return { send: false, date, reason: `weekend (${weekdayName(tz, now)})` };
+  }
+  if (hour < DIGEST_HOUR) {
+    return { send: false, date, reason: `too early (${hour}:00 local)` };
+  }
+  if (hour > DIGEST_CATCHUP_UNTIL_HOUR) {
+    return { send: false, date, reason: `past the catch-up window (${hour}:00 local)` };
+  }
+  if (lastSent === date) {
+    return { send: false, date, reason: 'already sent today' };
+  }
+
+  return {
+    send: true,
+    date,
+    reason: hour === DIGEST_HOUR ? 'on time' : `catch-up at ${hour}:00 local`,
+  };
+}
 
 // Names of sources that failed this run (for a "data may be incomplete" note).
 function downSources(d: DashboardData): string[] {
@@ -21,7 +70,7 @@ function esc(s: unknown): string {
 
 // ---- Email (Resend) ----
 
-function emailHTML(d: DashboardData, weekday: string): string {
+function emailHTML(d: DashboardData, weekday: string, url: string): string {
   const section = (title: string, rows: string[]) =>
     rows.length
       ? `<h2 style="font:600 13px/1.4 -apple-system,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#5E7158;margin:28px 0 10px">${esc(
@@ -68,7 +117,7 @@ function emailHTML(d: DashboardData, weekday: string): string {
     ${section('Field Notes', notes)}
     ${section('The Archive', files)}
     ${section('In the Background', music)}
-    <a href="${DASHBOARD_URL}" style="display:inline-block;margin-top:28px;font:600 12px/1 -apple-system,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#5E7158;text-decoration:none">Open the full dispatch →</a>
+    <a href="${esc(url)}" style="display:inline-block;margin-top:28px;font:600 12px/1 -apple-system,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#5E7158;text-decoration:none">Open the full dispatch →</a>
   </div>`;
 }
 
@@ -85,7 +134,7 @@ async function sendEmail(env: Env, d: DashboardData, weekday: string): Promise<s
       from,
       to: [env.DIGEST_TO],
       subject: `The Daily Dispatch — ${weekday}`,
-      html: emailHTML(d, weekday),
+      html: emailHTML(d, weekday, dashboardUrl(env)),
     }),
   });
   return resp.ok ? 'email sent' : `email failed: ${resp.status}`;
@@ -117,7 +166,7 @@ async function sendPush(env: Env, d: DashboardData, weekday: string): Promise<st
       user: env.PUSHOVER_USER,
       title: `The Daily Dispatch — ${weekday}`,
       message: pushText(d),
-      url: DASHBOARD_URL,
+      url: dashboardUrl(env),
       url_title: 'Open dispatch',
     }),
   });

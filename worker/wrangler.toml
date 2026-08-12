@@ -13,8 +13,15 @@ preview_id = "9519617a5ba54ce287d616d6a683747f"
 
 [vars]
 TIMEZONE = "America/Chicago"
+DASHBOARD_URL = "https://dispatch.eric-lawler.com"
 
-# 7am Central on weekdays. Two UTC times cover CST (UTC-6) and CDT (UTC-5);
-# the Worker only sends when it's actually 7am in TIMEZONE, so exactly one fires.
+# Fire hourly across the window that contains 7am Central in both CST (UTC-6) and
+# CDT (UTC-5), then let the Worker decide which run actually sends.
+#
+# Day-of-week is deliberately absent. With `1-5` in this field the digest ran
+# Sunday through Thursday and never once on Friday, so the weekday rule now lives
+# in decideDigest() where it is explicit and unit-tested. The later fires are
+# catch-ups: if the platform drops the 7am run, the next hour still delivers, and
+# a KV day-marker keeps that at-most-once.
 [triggers]
-crons = ["0 12 * * 1-5", "0 13 * * 1-5"]
+crons = ["0 12 * * *", "0 13 * * *", "0 14 * * *", "0 15 * * *"]

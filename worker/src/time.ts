@@ -11,7 +11,9 @@ function offsetFor(tz: string, date: Date): string {
   return m ? m[1] : '+00:00';
 }
 
-function ymdFor(tz: string, date: Date): string {
+// Calendar date (YYYY-MM-DD) as seen in `tz`. Also the key the digest uses to
+// record "already sent today", so a catch-up run can tell days apart correctly.
+export function localDate(tz: string, date = new Date()): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: tz,
     year: 'numeric',
@@ -32,9 +34,9 @@ export interface DayBounds {
 // RFC3339 boundaries for "today" and the next 7 days, anchored in `tz`.
 export function dayBounds(tz: string, now = new Date()): DayBounds {
   const off = offsetFor(tz, now);
-  const today = ymdFor(tz, now);
-  const tomorrow = ymdFor(tz, new Date(now.getTime() + 24 * 3600 * 1000));
-  const weekOut = ymdFor(tz, new Date(now.getTime() + 8 * 24 * 3600 * 1000));
+  const today = localDate(tz, now);
+  const tomorrow = localDate(tz, new Date(now.getTime() + 24 * 3600 * 1000));
+  const weekOut = localDate(tz, new Date(now.getTime() + 8 * 24 * 3600 * 1000));
   return {
     todayStart: `${today}T00:00:00${off}`,
     todayEnd: `${tomorrow}T00:00:00${off}`,
@@ -58,6 +60,30 @@ export function weekdayName(tz: string, now = new Date()): string {
   return new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'long' }).format(now);
 }
 
+const WEEKDAY_NAMES = [
+  'Sunday',
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+];
+
+// Day of week in `tz` as 0 (Sunday) through 6 (Saturday).
+export function weekdayIndex(tz: string, now = new Date()): number {
+  return WEEKDAY_NAMES.indexOf(weekdayName(tz, now));
+}
+
+// Monday through Friday in `tz`. The digest gates on this in code rather than in
+// the cron expression: cron day-of-week is evaluated by the platform in UTC and
+// proved unreliable in practice (the digest ran Sun-Thu, never on Friday), so the
+// rule lives here where it is explicit and unit-testable.
+export function isWeekday(tz: string, now = new Date()): boolean {
+  const d = weekdayIndex(tz, now);
+  return d >= 1 && d <= 5;
+}
+
 export function formatTime(iso: string, tz: string): string {
   return new Intl.DateTimeFormat('en-US', {
     timeZone: tz,
@@ -68,8 +94,8 @@ export function formatTime(iso: string, tz: string): string {
 
 // "Tomorrow" or short day + date like "Tue · May 26", anchored in `tz`.
 export function dayAndDate(iso: string, tz: string, now = new Date()): string {
-  const target = ymdFor(tz, new Date(iso));
-  const tomorrow = ymdFor(tz, new Date(now.getTime() + 24 * 3600 * 1000));
+  const target = localDate(tz, new Date(iso));
+  const tomorrow = localDate(tz, new Date(now.getTime() + 24 * 3600 * 1000));
   if (target === tomorrow) return 'Tomorrow';
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: tz,

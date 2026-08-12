@@ -1,7 +1,7 @@
 // Calendar (today + horizon), Gmail (recent threads), Drive (recent files).
 import type { Env } from '../index';
 import { getGoogleAccessToken } from '../auth';
-import { dayBounds, formatTime, dayAndDate, shortDate } from '../time';
+import { dayBounds, formatTime, dayAndDate, shortDate, weekdayIndex } from '../time';
 
 export interface CalendarItem {
   time: string;
@@ -97,11 +97,25 @@ function cleanFrom(raw: string): string {
   return (m ? m[1] : raw).trim();
 }
 
-async function fetchEmails(token: string): Promise<EmailItem[]> {
+// How far back Correspondence looks. A 1-day window read on a Monday morning
+// starts at Sunday morning, so Friday evening and all of Saturday fall off the
+// briefing entirely. Monday reaches back across the weekend instead, with a little
+// more headroom for the extra days.
+export function inboxWindow(
+  tz: string,
+  now = new Date()
+): { days: number; maxResults: number } {
+  return weekdayIndex(tz, now) === 1
+    ? { days: 3, maxResults: 12 }
+    : { days: 1, maxResults: 8 };
+}
+
+async function fetchEmails(token: string, tz: string): Promise<EmailItem[]> {
+  const { days, maxResults } = inboxWindow(tz);
   // category:primary keeps marketing/newsletter mail out of Correspondence.
-  const q = 'in:inbox newer_than:1d category:primary';
+  const q = `in:inbox newer_than:${days}d category:primary`;
   const list = await gFetch(
-    `https://gmail.googleapis.com/gmail/v1/users/me/threads?q=${encodeURIComponent(q)}&maxResults=8`,
+    `https://gmail.googleapis.com/gmail/v1/users/me/threads?q=${encodeURIComponent(q)}&maxResults=${maxResults}`,
     token
   );
   const threads: { id: string }[] = list.threads ?? [];
@@ -157,7 +171,7 @@ export async function fetchGoogle(env: Env): Promise<GoogleData> {
       ok = false;
       return { calendar: [] as CalendarItem[], horizon: [] as HorizonItem[] };
     }),
-    fetchEmails(token).catch(() => {
+    fetchEmails(token, tz).catch(() => {
       ok = false;
       return [] as EmailItem[];
     }),

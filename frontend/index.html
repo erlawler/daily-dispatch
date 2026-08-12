@@ -689,15 +689,21 @@ function setEditorial() {
 setEditorial();
 
 // === Weather (open-meteo, no key needed) ===
+// Town-level coordinates, rounded to ~1km on purpose: this file is public, and a
+// weather line has no use for a precision that would point at a house.
+const WEATHER_LAT = 33.09;
+const WEATHER_LON = -97.26;
+const WEATHER_PLACE = "Northlake, TX";
+
 async function loadWeather() {
   try {
-    const r = await fetch("https://api.open-meteo.com/v1/forecast?latitude=33.0915&longitude=-97.2611&current=temperature_2m,weather_code&temperature_unit=fahrenheit&timezone=America%2FChicago");
+    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${WEATHER_LAT}&longitude=${WEATHER_LON}&current=temperature_2m,weather_code&temperature_unit=fahrenheit&timezone=America%2FChicago`);
     const d = await r.json();
     const t = Math.round(d.current.temperature_2m);
     const desc = weatherDesc(d.current.weather_code);
     document.getElementById("weather-line").textContent = `${t}°F · ${desc}`;
   } catch (e) {
-    document.getElementById("weather-line").textContent = "Northlake, TX";
+    document.getElementById("weather-line").textContent = WEATHER_PLACE;
   }
 }
 function weatherDesc(code) {
@@ -731,7 +737,9 @@ document.getElementById("coda-quote").textContent = q[0];
 document.getElementById("coda-attr").textContent = q[1] === "—" ? "" : q[1];
 
 // === Main data load ===
-async function loadAll() {
+// The Worker serves a short-lived cached payload so ordinary loads are instant.
+// Tapping ↻ means "I want this rebuilt now", so it asks for a bypass.
+async function loadAll({ refresh = false } = {}) {
   const refreshBtn = document.getElementById("refresh-btn");
   refreshBtn.classList.add("spinning");
 
@@ -746,7 +754,7 @@ async function loadAll() {
   document.getElementById("np-disc").classList.remove("playing");
 
   try {
-    const resp = await fetch(WORKER_URL + "/api/dashboard");
+    const resp = await fetch(WORKER_URL + "/api/dashboard" + (refresh ? "?refresh=1" : ""));
     if (!resp.ok) throw new Error("API returned " + resp.status);
     const payload = await resp.json();
     if (payload && payload.error) throw new Error(payload.error);
@@ -919,7 +927,7 @@ function renderError(msg) {
   document.getElementById("np-disc").classList.remove("playing");
 }
 
-document.getElementById("refresh-btn").addEventListener("click", () => loadAll());
+document.getElementById("refresh-btn").addEventListener("click", () => loadAll({ refresh: true }));
 
 // Kick off on load
 loadWeather();

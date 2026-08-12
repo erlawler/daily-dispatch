@@ -1,5 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { currentHour, dayBounds, dayAndDate, shortDate, formatTime, weekdayName } from '../src/time';
+import {
+  currentHour,
+  dayBounds,
+  dayAndDate,
+  isWeekday,
+  localDate,
+  shortDate,
+  formatTime,
+  weekdayName,
+  weekdayIndex,
+} from '../src/time';
 
 const TZ = 'America/Chicago';
 
@@ -16,6 +26,39 @@ describe('currentHour — DST-safe cron gating', () => {
   });
   it('summer: 13:00 UTC is 8am — cron no-ops', () => {
     expect(currentHour(TZ, new Date('2026-07-15T13:00:00Z'))).toBe(8);
+  });
+});
+
+describe('weekday helpers — resolved in the local zone, not UTC', () => {
+  it('indexes days from Sunday (0) through Saturday (6)', () => {
+    expect(weekdayIndex(TZ, new Date('2026-08-09T12:00:00Z'))).toBe(0); // Sunday
+    expect(weekdayIndex(TZ, new Date('2026-08-14T12:00:00Z'))).toBe(5); // Friday
+    expect(weekdayIndex(TZ, new Date('2026-08-08T12:00:00Z'))).toBe(6); // Saturday
+  });
+
+  it('counts Monday through Friday as weekdays', () => {
+    expect(isWeekday(TZ, new Date('2026-08-10T12:00:00Z'))).toBe(true); // Monday
+    expect(isWeekday(TZ, new Date('2026-08-14T12:00:00Z'))).toBe(true); // Friday
+    expect(isWeekday(TZ, new Date('2026-08-08T12:00:00Z'))).toBe(false); // Saturday
+    expect(isWeekday(TZ, new Date('2026-08-09T12:00:00Z'))).toBe(false); // Sunday
+  });
+
+  it('uses the local day, not the UTC one, near midnight', () => {
+    // 11:30pm CDT Friday is already Saturday in UTC. The digest must read Friday.
+    const lateFriday = new Date('2026-08-15T04:30:00Z');
+    expect(weekdayName(TZ, lateFriday)).toBe('Friday');
+    expect(isWeekday(TZ, lateFriday)).toBe(true);
+  });
+});
+
+describe('localDate', () => {
+  it('returns the local calendar day', () => {
+    expect(localDate(TZ, new Date('2026-08-12T12:00:00Z'))).toBe('2026-08-12');
+  });
+
+  it('does not roll over early just because UTC has', () => {
+    // 11:00pm CDT on the 12th is 04:00 UTC on the 13th.
+    expect(localDate(TZ, new Date('2026-08-13T04:00:00Z'))).toBe('2026-08-12');
   });
 });
 

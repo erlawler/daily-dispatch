@@ -34,17 +34,18 @@ A newspaper-styled dashboard with six "departments," plus a one-line editorial
 | --- | --- |
 | The Schedule | Google Calendar — today's timed events |
 | The Horizon | Google Calendar — next 7 days |
-| Correspondence | Gmail — recent primary-inbox threads |
+| Correspondence | Gmail — recent primary-inbox threads (Monday reaches back over the weekend) |
 | Work Docket | Todoist — today + overdue |
 | Field Notes | Notion — recently edited pages |
 | The Archive | Google Drive — recently modified files |
 | Marginalia | Spotify — now playing / recently played |
 | "At a glance" | Claude Haiku — one calm sentence summarizing the day |
 
-The same pipeline also powers a **morning digest**: a Worker cron fires on weekdays
-at 7:00 AM Central (DST-safe — proven by unit tests) and delivers the briefing as
-an HTML email (Resend) and a phone push (Pushover). Each channel is optional and
-activates only when its keys are configured.
+The same pipeline also powers a **morning digest**: on weekday mornings at 7:00 AM
+Central the Worker delivers the briefing as an HTML email (Resend) and a phone push
+(Pushover). Each channel is optional and activates only when its keys are
+configured. The schedule is decided in code and covered by unit tests, for reasons
+in [Reliability](#reliability).
 
 ## Architecture
 
@@ -61,16 +62,19 @@ activates only when its keys are configured.
                        ├── Google (Calendar · Gmail · Drive)
                        ├── Notion · Todoist · Spotify    (parallel, per-source health)
                        ├── Claude Haiku  (the "glance" sentence)
-                       └── KV  (cached OAuth tokens)
+                       └── KV  (OAuth tokens · payload cache · digest day-marker)
                                    ▲
-                                   │  weekday cron · 7:00 AM Central (DST-safe)
+                                   │  hourly cron · sends once, 7:00 AM Central
                                    └─▶  digest: email (Resend) + push (Pushover)
 ```
 
-The browser only ever talks to its **own origin**. A Pages Function proxies
-`/api/dashboard` to the Worker server-side, attaching a shared secret. The Worker
-fans out to every service in parallel and returns a single JSON payload the
-frontend renders.
+Every piece of personal data travels through the site's **own origin**. A Pages
+Function proxies `/api/dashboard` to the Worker server-side, attaching a shared
+secret; the browser never sees the Worker URL or the key. The Worker fans out to
+every service in parallel and returns a single JSON payload the frontend renders,
+cached in KV for five minutes so a reload costs nothing. (The two third-party calls
+the page makes directly, a keyless weather lookup and Google Fonts, carry no
+account data and no credentials.)
 
 ## AI product decisions
 
@@ -98,9 +102,17 @@ where.
   found a real expired-token failure that graceful degradation had been hiding.)
 - **Graceful degradation.** One flaky service never blanks the briefing — the
   other five sections render regardless.
-- **DST-safe scheduling.** Two UTC crons (12:00/13:00) + a timezone-hour check
-  mean the digest lands at 7am Central year-round; the unit tests pin both the
-  winter and summer cases.
+- **The schedule is code, not a cron expression.** The digest originally declared
+  its days as `0 12 * * 1-5`. Thirty days of delivery records showed what actually
+  happened: it ran every Sunday, and never once on a Friday. Weekday, hour, and
+  DST are all decided in `decideDigest()` now, where they are explicit and pinned
+  by tests. The cron just fires hourly and the code chooses.
+- **Missed runs get caught, not lost.** Scheduled invocations are best effort, and
+  two of them silently vanished over that same month. Later fires act as catch-ups
+  through 9am, and a KV day-marker makes delivery at-most-once, so a dropped run
+  costs a late briefing instead of no briefing.
+- **Delivery is logged.** Every run records what it decided and what each channel
+  returned. A dead Resend key no longer looks exactly like a quiet morning.
 
 ## Security model
 
@@ -127,12 +139,13 @@ daily-dispatch/
 │   ├── src/
 │   │   ├── index.ts           # /api/dashboard entry + secret guard + cron
 │   │   ├── dashboard.ts       # shared data builder + per-source health
-│   │   ├── digest.ts          # 7am email (Resend) + push (Pushover)
+│   │   ├── digest.ts          # send decision + email (Resend) + push (Pushover)
+│   │   ├── cache.ts           # short-lived KV cache for the built payload
 │   │   ├── auth.ts            # Google + Spotify OAuth refresh (KV-cached)
-│   │   ├── time.ts            # timezone-aware date helpers
+│   │   ├── time.ts            # timezone-aware date + weekday helpers
 │   │   ├── synthesize.ts      # the Haiku "glance" sentence
 │   │   └── services/          # google · notion · todoist · spotify
-│   └── test/                  # vitest unit tests (DST cron gating, date logic)
+│   └── test/                  # vitest unit tests (send schedule, DST, date logic)
 ├── .github/workflows/ci.yml   # typecheck + tests on every push
 └── scripts/                   # one-time OAuth / setup walkthroughs
 ```
@@ -143,7 +156,7 @@ daily-dispatch/
 cd worker
 npm install
 npm run typecheck
-npm test           # 11 unit tests, including the DST cron-gating proofs
+npm test           # 30 unit tests, including the send-schedule and DST proofs
 npm run dev        # local Worker on :8787
 ```
 
@@ -160,11 +173,15 @@ frontier-model work gated behind proof it earns its cost:
    First feature that justifies a frontier model (Claude Fable 5-class):
    multi-source reasoning where quality compounds and a weak model is worse than
    none.
-2. **Next — instrument the product.** Workers Analytics Engine on load counts,
-   section engagement, digest opens: a personal product deserves real usage data
-   before more features.
-3. **Later — template-ize.** Config-driven sources and identity so someone else
-   can deploy their own dispatch without touching code.
+2. **Next — instrument the delivery path.** The schedule defect above was found by
+   reading a month of delivery records by hand, which is a bad way to learn your
+   product skipped every Friday. Workers Analytics Engine on send outcomes, load
+   counts, and digest opens, with an alert when a weekday morning passes with
+   nothing sent. Cheap, and it closes the loop that manual review just proved is
+   open.
+3. **Later — template-ize.** URLs and identity are config now; sources are still
+   hardcoded. Making those declarative is what stands between this and something
+   another person could deploy without touching code.
 
 ## Tech
 
