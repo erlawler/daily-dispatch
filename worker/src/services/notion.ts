@@ -1,3 +1,4 @@
+import { providerFetch } from '../http';
 // Recently edited Notion pages via /v1/search.
 import type { Env } from '../index';
 import { shortDate } from '../time';
@@ -31,7 +32,7 @@ function extractTitle(obj: any): string {
 
 export async function fetchNotion(env: Env): Promise<NotionResult> {
   try {
-    const resp = await fetch('https://api.notion.com/v1/search', {
+    const resp = await providerFetch('https://api.notion.com/v1/search', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${env.NOTION_TOKEN}`,

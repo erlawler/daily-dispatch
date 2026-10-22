@@ -1,3 +1,4 @@
+import { providerFetch } from '../http';
 // Calendar (today + horizon), Gmail (recent threads), Drive (recent files).
 import type { Env } from '../index';
 import { getGoogleAccessToken } from '../auth';
@@ -40,7 +41,7 @@ interface GEvent {
 }
 
 async function gFetch(url: string, token: string): Promise<any> {
-  const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const resp = await providerFetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!resp.ok) throw new Error(`Google ${resp.status} for ${new URL(url).pathname}`);
   return resp.json();
 }

@@ -2,7 +2,9 @@
 import { buildDashboard } from './dashboard';
 import type { DashboardData } from './dashboard';
 import { decideDigest, sendDigest } from './digest';
-import { readCache, writeCache } from './cache';
+import { writeCache } from './cache';
+import { apiResponse } from './http';
+import { interactiveDashboard, RefreshCooldown } from './interactive';
 
 export interface Env {
   TOKENS: KVNamespace;
@@ -60,7 +62,7 @@ async function runDigest(env: Env): Promise<void> {
     data = await buildDashboard(env);
   } catch (err) {
     console.error(
-      `digest ${decision.date}: build failed, will retry on catch-up: ${String(err)}`
+      `digest ${decision.date}: build failed, will retry on catch-up`
     );
     return;
   }
@@ -80,26 +82,27 @@ export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
 
-    if (url.pathname === '/api/dashboard') {
-      const key = req.headers.get('X-Dispatch-Key') ?? '';
-      if (!env.DISPATCH_KEY || !safeEqual(key, env.DISPATCH_KEY)) {
-        return new Response('Forbidden', { status: 403 });
-      }
-      try {
-        // The refresh control asks for a rebuild; ordinary loads take the cache.
-        if (url.searchParams.get('refresh') !== '1') {
-          const cached = await readCache(env);
-          if (cached) return Response.json(cached);
-        }
-        const data = await buildDashboard(env);
-        ctx.waitUntil(writeCache(env, data));
-        return Response.json(data);
-      } catch (err) {
-        return Response.json({ error: String(err) }, { status: 500 });
-      }
+    if (url.pathname !== '/api/dashboard') return apiResponse({error: 'Not found'}, 404);
+    const force = url.searchParams.get('refresh') === '1';
+    if ((force && req.method !== 'POST') || (!force && req.method !== 'GET')) {
+      return apiResponse({error: 'Method not allowed'}, 405, {Allow: force ? 'POST' : 'GET'});
     }
-
-    return new Response('Not found', { status: 404 });
+    const key = req.headers.get('X-Dispatch-Key') ?? '';
+    if (!env.DISPATCH_KEY || !safeEqual(key, env.DISPATCH_KEY)) {
+      return apiResponse({error: 'Forbidden'}, 403);
+    }
+    try {
+      const result = await interactiveDashboard(env, force);
+      const headers: Record<string, string> = {};
+      if (result.retryAfter) headers['Retry-After'] = String(result.retryAfter);
+      if (result.cooldown) headers['X-Dispatch-Refresh'] = 'cooldown';
+      return apiResponse(result.data, 200, headers);
+    } catch (error) {
+      if (error instanceof RefreshCooldown) {
+        return apiResponse({error: 'Please wait a moment before refreshing again.'}, 429, {'Retry-After': String(error.retryAfter)});
+      }
+      return apiResponse({error: 'The dashboard is temporarily unavailable. Please retry shortly.'}, 503);
+    }
   },
 
   // Cron fires hourly from 12:00 to 15:00 UTC every day. Which of those runs

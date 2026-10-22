@@ -1,3 +1,4 @@
+import { providerFetch } from '../http';
 // Currently-playing track, falling back to recently-played.
 import type { Env } from '../index';
 import { getSpotifyAccessToken } from '../auth';
@@ -23,7 +24,7 @@ export async function fetchSpotify(env: Env): Promise<SpotifyResult> {
     const token = await getSpotifyAccessToken(env);
     const auth = { Authorization: `Bearer ${token}` };
 
-    const now = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
+    const now = await providerFetch('https://api.spotify.com/v1/me/player/currently-playing', {
       headers: auth,
     });
 
@@ -39,7 +40,7 @@ export async function fetchSpotify(env: Env): Promise<SpotifyResult> {
     }
 
     // 204 (nothing playing) or no item -> recently played.
-    const recentRes = await fetch(
+    const recentRes = await providerFetch(
       'https://api.spotify.com/v1/me/player/recently-played?limit=4',
       { headers: auth }
     );

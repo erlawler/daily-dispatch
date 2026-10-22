@@ -76,6 +76,32 @@ cached in KV for five minutes so a reload costs nothing. (The two third-party ca
 the page makes directly, a keyless weather lookup and Google Fonts, carry no
 account data and no credentials.)
 
+## Request security
+
+The Pages custom domain must remain protected by Cloudflare Access. The proxy's
+hostname allowlist and server-held shared secret complement that gateway; the
+application does not independently verify an Access JWT audience. Keep alternate
+Pages hostnames blocked and verify the Access policy before publishing.
+
+Ordinary dashboard reads use GET. Manual refresh uses a same-origin POST and a
+60-second rebuild cooldown. Repeated refreshes return the latest cached payload;
+a request with no cached payload receives 429 while cooling down. Concurrent
+requests in one Worker isolate share a rebuild. The persisted cooldown uses
+Cloudflare KV, which is eventually consistent, so this limits routine refresh
+abuse but does not guarantee a global spending cap. Gateway rate limits and
+provider billing limits need separate infrastructure verification. Scheduled
+digest decisions and delivery channels use their existing paths.
+
+Credentialed provider requests use fixed HTTPS origins, reject redirects, and
+time out after 15 seconds. Dashboard responses and frontend assets use private,
+no-store caching. The Pages static policy in `frontend/_headers` permits the
+current inline script by SHA-256 hash, the existing inline styles, Google Fonts,
+and the public weather endpoint. Any inline script edit must update its hash;
+`worker/test/frontend-security.test.mjs` checks that the policy matches the file.
+
+Run `npm run typecheck` and `npm test -- --maxWorkers=2` in `worker/` before release.
+Security tests use local mocks and never call live integrations or delivery APIs.
+
 ## AI product decisions
 
 The interesting choice here isn't *using* AI — it's how little of it to use, and

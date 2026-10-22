@@ -1,3 +1,4 @@
+import { providerFetch } from './http';
 // One short editorial "glance" sentence, synthesized by Claude Haiku.
 // Deliberately tiny: we only synthesize the single sentence, not the whole dashboard.
 import type { Env } from './index';
@@ -20,7 +21,7 @@ export async function synthesizeGlance(data: DashboardData, env: Env): Promise<s
   ].join('; ');
 
   try {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    const resp = await providerFetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'x-api-key': env.ANTHROPIC_API_KEY,

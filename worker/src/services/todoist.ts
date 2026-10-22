@@ -1,3 +1,4 @@
+import { providerFetch } from '../http';
 // Today + overdue Todoist tasks, with project names resolved.
 import type { Env } from '../index';
 
@@ -22,12 +23,12 @@ export async function fetchTodoist(env: Env): Promise<TodoistResult> {
     const headers = { Authorization: `Bearer ${env.TODOIST_TOKEN}` };
 
     const [tasksRes, projectsRes] = await Promise.all([
-      fetch(
+      providerFetch(
         'https://api.todoist.com/api/v1/tasks/filter?query=' +
           encodeURIComponent('(today | overdue)'),
         { headers }
       ),
-      fetch('https://api.todoist.com/api/v1/projects', { headers }),
+      providerFetch('https://api.todoist.com/api/v1/projects', { headers }),
     ]);
 
     if (!tasksRes.ok) return { ok: false, items: [] };
