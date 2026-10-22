@@ -1,3 +1,4 @@
+import { providerFetch } from './http';
 // OAuth token refresh for Google and Spotify, with KV-cached access tokens.
 import type { Env } from './index';
 
@@ -12,7 +13,7 @@ export async function getGoogleAccessToken(env: Env): Promise<string> {
     return cached.access_token;
   }
 
-  const resp = await fetch('https://oauth2.googleapis.com/token', {
+  const resp = await providerFetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -48,7 +49,7 @@ export async function getSpotifyAccessToken(env: Env): Promise<string> {
   const refreshToken = storedRefresh || env.SPOTIFY_REFRESH_TOKEN;
 
   const basic = btoa(`${env.SPOTIFY_CLIENT_ID}:${env.SPOTIFY_CLIENT_SECRET}`);
-  const resp = await fetch('https://accounts.spotify.com/api/token', {
+  const resp = await providerFetch('https://accounts.spotify.com/api/token', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',

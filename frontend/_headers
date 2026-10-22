@@ -1,0 +1,8 @@
+/*
+  Cache-Control: private, no-store, max-age=0
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'sha256-xUY7u1ItixZrXvUye1wkpoTlxZZMg5mvQnFEZ1rFdNw='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.open-meteo.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+  Strict-Transport-Security: max-age=31536000

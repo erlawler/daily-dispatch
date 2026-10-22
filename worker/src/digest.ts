@@ -1,3 +1,4 @@
+import { providerFetch } from './http';
 // 7am digest delivery: an HTML email via Resend and a phone push via Pushover.
 // Each channel is independent and only fires if its secrets are configured.
 import type { Env } from './index';
@@ -124,7 +125,7 @@ function emailHTML(d: DashboardData, weekday: string, url: string): string {
 async function sendEmail(env: Env, d: DashboardData, weekday: string): Promise<string> {
   if (!env.RESEND_API_KEY || !env.DIGEST_TO) return 'email skipped (not configured)';
   const from = env.DIGEST_FROM || 'Daily Dispatch <onboarding@resend.dev>';
-  const resp = await fetch('https://api.resend.com/emails', {
+  const resp = await providerFetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${env.RESEND_API_KEY}`,
@@ -158,7 +159,7 @@ function pushText(d: DashboardData): string {
 
 async function sendPush(env: Env, d: DashboardData, weekday: string): Promise<string> {
   if (!env.PUSHOVER_TOKEN || !env.PUSHOVER_USER) return 'push skipped (not configured)';
-  const resp = await fetch('https://api.pushover.net/1/messages.json', {
+  const resp = await providerFetch('https://api.pushover.net/1/messages.json', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -180,5 +181,5 @@ export async function sendDigest(env: Env, d: DashboardData): Promise<string[]> 
     sendEmail(env, d, weekday),
     sendPush(env, d, weekday),
   ]);
-  return results.map((r) => (r.status === 'fulfilled' ? r.value : `error: ${r.reason}`));
+  return results.map((r) => (r.status === 'fulfilled' ? r.value : 'delivery failed'));
 }

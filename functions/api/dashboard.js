@@ -1,43 +1,51 @@
-// Pages Function: server-side proxy for /api/dashboard.
-// Runs on the Pages origin (behind Cloudflare Access), forwards to the Worker
-// with the shared secret header. The secret lives in Pages env (DISPATCH_KEY)
-// and is never exposed to the browser.
-//
-// WORKER_URL and ALLOWED_HOST can be overridden in the Pages environment; the
-// defaults below keep this deployment working when they are unset.
+// Access-gated Pages origin proxies requests using its server-only shared secret.
 const DEFAULT_WORKER_URL = "https://daily-dispatch.ericlawler.workers.dev/api/dashboard";
 const DEFAULT_ALLOWED_HOST = "dispatch.eric-lawler.com";
+const headers = {
+  "Content-Type": "application/json; charset=utf-8",
+  "Cache-Control": "private, no-store, max-age=0",
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'; base-uri 'none'",
+  "Referrer-Policy": "no-referrer",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+  "Strict-Transport-Security": "max-age=31536000",
+};
+const error = (message, status, extra = {}) => new Response(JSON.stringify({error: message}), {status, headers: {...headers, ...extra}});
 
-export async function onRequestGet(context) {
-  const { env, request } = context;
+export async function onRequest({env, request}) {
   const url = new URL(request.url);
-
-  // Data is only served on the Access-gated custom domain. The public *.pages.dev
-  // hostname (which Access can't protect) gets 403 here, so it can't bypass the gate.
-  if (url.hostname !== (env.ALLOWED_HOST || DEFAULT_ALLOWED_HOST)) {
-    return new Response("Forbidden", { status: 403 });
+  if (url.hostname !== (env.ALLOWED_HOST || DEFAULT_ALLOWED_HOST)) return error("Forbidden", 403);
+  const refresh = url.searchParams.get("refresh") === "1";
+  if ((refresh && request.method !== "POST") || (!refresh && request.method !== "GET")) {
+    return error("Method not allowed", 405, {Allow: refresh ? "POST" : "GET"});
   }
-
-  // Forward the refresh flag and nothing else. It is the only parameter the Worker
-  // reads, and copying the query string wholesale would let a caller shape the
-  // upstream URL.
-  const target = new URL(env.WORKER_URL || DEFAULT_WORKER_URL);
-  if (url.searchParams.get("refresh") === "1") {
-    target.searchParams.set("refresh", "1");
+  if (request.headers.get("sec-fetch-site") === "cross-site" ||
+      (refresh && request.headers.get("origin") !== url.origin)) {
+    return error("Cross-site request rejected", 403);
   }
-
+  if (!env.DISPATCH_KEY) return error("Dashboard unavailable", 503);
   try {
+    // This URL is trusted deployment configuration, never a browser parameter.
+    const target = new URL(env.WORKER_URL || DEFAULT_WORKER_URL);
+    if (target.protocol !== "https:" || target.username || target.password || target.hash || target.search || target.pathname !== "/api/dashboard") {
+      return error("Dashboard unavailable", 503);
+    }
+    if (refresh) target.searchParams.set("refresh", "1");
     const resp = await fetch(target, {
-      headers: { "X-Dispatch-Key": env.DISPATCH_KEY || "" },
+      method: refresh ? "POST" : "GET",
+      headers: {"X-Dispatch-Key": env.DISPATCH_KEY},
+      redirect: "manual", signal: AbortSignal.timeout(65_000),
     });
-    return new Response(resp.body, {
-      status: resp.status,
-      headers: { "content-type": "application/json; charset=utf-8" },
-    });
-  } catch (err) {
-    return new Response(JSON.stringify({ error: String(err) }), {
-      status: 502,
-      headers: { "content-type": "application/json; charset=utf-8" },
-    });
+    const retryAfter = resp.headers.get("retry-after");
+    const extra = /^\d{1,5}$/.test(retryAfter || "") ? {"Retry-After": retryAfter} : {};
+    if (!resp.ok) {
+      await resp.body?.cancel();
+      return error(resp.status === 429 ? "Please wait a moment before refreshing again." : "Dashboard unavailable", resp.status === 429 ? 429 : 502, extra);
+    }
+    if (resp.headers.get("X-Dispatch-Refresh") === "cooldown") extra["X-Dispatch-Refresh"] = "cooldown";
+    return new Response(resp.body, {status: resp.status, headers: {...headers, ...extra}});
+  } catch {
+    return error("Dashboard unavailable. Please retry shortly.", 502);
   }
 }
