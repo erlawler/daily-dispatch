@@ -13,14 +13,14 @@
     "@cloudflare/workers-types": "^5.20260710.1",
     "typescript": "^5.7.0",
     "vitest": "4.1.12",
-    "wrangler": "^4.0.0"
+    "wrangler": "4.156.2"
   },
   "overrides": {
     "nanoid@^3.0.0": "3.3.18",
     "postcss": "8.5.23",
     "sharp": "0.35.5",
     "source-map-js": "1.2.2",
-    "undici": "7.29.1",
+    "undici": "7.30.1",
     "vite": "7.3.7"
   }
 }
